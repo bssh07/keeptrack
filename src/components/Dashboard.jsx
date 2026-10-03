@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { auth, db } from '../firebase';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, doc, deleteDoc } from 'firebase/firestore';
-import { LogOut, Plus, Trash2, CheckCircle, Circle, Target, Edit2, X, Check, Menu, ChevronDown, ChevronUp, ListTodo, Clock, RotateCcw } from 'lucide-react';
+import { LogOut, Plus, Trash2, CheckCircle, Circle, Target, Edit2, X, Check, Menu, ChevronDown, ChevronUp, ChevronRight, ListTodo, Clock, RotateCcw, GitBranch } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function Dashboard() {
@@ -10,10 +10,15 @@ export default function Dashboard() {
   const [selectedGoalId, setSelectedGoalId] = useState('all');
   const [taskStatusFilter, setTaskStatusFilter] = useState('all'); // 'all' | 'open' | 'completed' | 'deleted'
 
-  // Forms
+  // Forms — top-level goal
   const [newGoalTitle, setNewGoalTitle] = useState('');
   const [newGoalDate, setNewGoalDate] = useState('');
-  
+
+  // Forms — subgoal inline
+  const [newSubgoalParentId, setNewSubgoalParentId] = useState(null);
+  const [newSubgoalTitle, setNewSubgoalTitle] = useState('');
+  const [newSubgoalDate, setNewSubgoalDate] = useState('');
+
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDescription, setNewTaskDescription] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState('Low');
@@ -22,16 +27,24 @@ export default function Dashboard() {
   // Editing state
   const [editingGoalId, setEditingGoalId] = useState(null);
   const [editingGoalData, setEditingGoalData] = useState({ title: '', dueDate: '' });
-  
+
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [editingTaskData, setEditingTaskData] = useState({ title: '', priority: '', dueDate: '', description: '' });
 
   // UI state
   const [expandedTasks, setExpandedTasks] = useState([]);
+  const [expandedGoals, setExpandedGoals] = useState([]); // goal IDs whose subgoals are visible
 
   const toggleTaskExpansion = (taskId) => {
-    setExpandedTasks(prev => 
+    setExpandedTasks(prev =>
       prev.includes(taskId) ? prev.filter(id => id !== taskId) : [...prev, taskId]
+    );
+  };
+
+  const toggleGoalExpansion = (goalId, e) => {
+    e.stopPropagation();
+    setExpandedGoals(prev =>
+      prev.includes(goalId) ? prev.filter(id => id !== goalId) : [...prev, goalId]
     );
   };
 
@@ -59,26 +72,23 @@ export default function Dashboard() {
   // Fetch Tasks
   useEffect(() => {
     if (!auth.currentUser) return;
-    
+
     const q = query(collection(db, 'tasks'), where('userId', '==', auth.currentUser.uid));
-    
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const tasksData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const priorityWeight = { High: 3, Medium: 2, Low: 1 };
-      
-      // Sort in memory: incomplete first, completed at the bottom, then by priority, then by creation date
+
+      // Sort: incomplete first, then by priority, then by creation date
       tasksData.sort((a, b) => {
         if (a.completed !== b.completed) {
           return a.completed ? 1 : -1;
         }
-        
         const priorityA = priorityWeight[a.priority] || 1;
         const priorityB = priorityWeight[b.priority] || 1;
-        
         if (priorityA !== priorityB) {
           return priorityB - priorityA;
         }
-
         const timeA = typeof a.createdAt?.toMillis === 'function' ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
         const timeB = typeof b.createdAt?.toMillis === 'function' ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
         return timeA - timeB;
@@ -90,19 +100,56 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, [auth.currentUser?.uid]);
 
-  const handleAddGoal = async (e) => {
+  // ── Goal Hierarchy Helpers ───────────────────────────────────────────────────
+  const topLevelGoals = goals.filter(g => !g.parentGoalId);
+  const subgoalsOf = (parentId) => goals.filter(g => g.parentGoalId === parentId);
+
+  // Returns goal + parent info for breadcrumb
+  const getGoalBreadcrumb = (goalId) => {
+    const goal = goals.find(g => g.id === goalId);
+    if (!goal) return null;
+    if (goal.parentGoalId) {
+      const parent = goals.find(g => g.id === goal.parentGoalId);
+      return { goalTitle: goal.title, parentTitle: parent?.title || null };
+    }
+    return { goalTitle: goal.title, parentTitle: null };
+  };
+
+  // Returns the currently selected goal (null if 'all'/'deleted')
+  const selectedGoal = goals.find(g => g.id === selectedGoalId) || null;
+  const selectedGoalParent = selectedGoal?.parentGoalId
+    ? goals.find(g => g.id === selectedGoal.parentGoalId) || null
+    : null;
+
+  // ── CRUD ────────────────────────────────────────────────────────────────────
+  const handleAddGoal = async (e, parentGoalId = null) => {
     e.preventDefault();
-    if (!newGoalTitle.trim()) return;
+    const title = parentGoalId ? newSubgoalTitle : newGoalTitle;
+    const date = parentGoalId ? newSubgoalDate : newGoalDate;
+    if (!title.trim()) return;
     try {
-      const docRef = await addDoc(collection(db, 'goals'), {
+      const payload = {
         userId: auth.currentUser.uid,
-        title: newGoalTitle,
-        dueDate: newGoalDate || '', // Optional
-        createdAt: serverTimestamp()
-      });
-      setSelectedGoalId(docRef.id);
-      setNewGoalTitle('');
-      setNewGoalDate('');
+        title: title.trim(),
+        dueDate: date || '',
+        createdAt: serverTimestamp(),
+      };
+      if (parentGoalId) payload.parentGoalId = parentGoalId;
+
+      const docRef = await addDoc(collection(db, 'goals'), payload);
+
+      if (parentGoalId) {
+        // Auto-expand parent & select the new subgoal
+        setExpandedGoals(prev => prev.includes(parentGoalId) ? prev : [...prev, parentGoalId]);
+        setSelectedGoalId(docRef.id);
+        setNewSubgoalTitle('');
+        setNewSubgoalDate('');
+        setNewSubgoalParentId(null);
+      } else {
+        setSelectedGoalId(docRef.id);
+        setNewGoalTitle('');
+        setNewGoalDate('');
+      }
     } catch (error) {
       console.error("Error adding goal", error);
     }
@@ -110,8 +157,15 @@ export default function Dashboard() {
 
   const handleDeleteGoal = async (id) => {
     if (confirm("Are you sure you want to delete this goal and all its tasks?")) {
+      // Also delete subgoals
+      const children = subgoalsOf(id);
+      for (const child of children) {
+        await deleteDoc(doc(db, 'goals', child.id));
+      }
       await deleteDoc(doc(db, 'goals', id));
-      if (selectedGoalId === id) setSelectedGoalId('all');
+      if (selectedGoalId === id || children.some(c => c.id === selectedGoalId)) {
+        setSelectedGoalId('all');
+      }
     }
   };
 
@@ -138,7 +192,7 @@ export default function Dashboard() {
         title: newTaskTitle,
         description: newTaskDescription || '',
         priority: newTaskPriority,
-        dueDate: newTaskDate || '', // Optional
+        dueDate: newTaskDate || '',
         completed: false,
         deleted: false,
         createdAt: serverTimestamp()
@@ -207,12 +261,12 @@ export default function Dashboard() {
     }
   };
 
-  // Task Collections
+  // ── Task Collections ─────────────────────────────────────────────────────────
   const activeTasks = tasks.filter(t => !t.deleted);
   const deletedTasks = tasks.filter(t => t.deleted === true);
 
-  const goalActiveTasks = selectedGoalId === 'all' 
-    ? activeTasks 
+  const goalActiveTasks = selectedGoalId === 'all'
+    ? activeTasks
     : (selectedGoalId === 'deleted' ? activeTasks : activeTasks.filter(t => t.goalId === selectedGoalId));
 
   const goalDeletedTasks = selectedGoalId === 'deleted'
@@ -261,12 +315,241 @@ export default function Dashboard() {
     setSelectedGoalId('deleted');
   };
 
+  // ── Sub-components ───────────────────────────────────────────────────────────
+
+  // Task goal breadcrumb badge
+  const TaskGoalBadge = ({ task }) => {
+    const crumb = getGoalBreadcrumb(task.goalId);
+    if (!crumb) return null;
+    return (
+      <span className="task-goal-badge">
+        <Target size={11} />
+        {crumb.parentTitle ? (
+          <>
+            <span className="task-goal-parent">{crumb.parentTitle}</span>
+            <span className="task-goal-sep">›</span>
+            <span>{crumb.goalTitle}</span>
+          </>
+        ) : (
+          crumb.goalTitle
+        )}
+      </span>
+    );
+  };
+
+  // Single goal row in sidebar (shared by top-level + subgoal)
+  const GoalRow = ({ goal, isSubgoal = false }) => {
+    const isActive = selectedGoalId === goal.id;
+    const isEditing = editingGoalId === goal.id;
+    const children = subgoalsOf(goal.id);
+    const hasChildren = children.length > 0;
+    const isExpanded = expandedGoals.includes(goal.id);
+
+    return (
+      <div className={isSubgoal ? 'subgoal-group' : 'goal-group'}>
+        <div
+          className={`goal-item ${isActive ? 'active' : ''} ${isSubgoal ? 'goal-item-sub' : ''}`}
+          onClick={() => {
+            if (!isEditing) {
+              setSelectedGoalId(goal.id);
+              setIsSidebarOpen(false);
+            }
+          }}
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+        >
+          {/* Expand/collapse chevron — only on top-level goals */}
+          {!isSubgoal && (
+            <button
+              className="goal-expand-btn"
+              onClick={(e) => toggleGoalExpansion(goal.id, e)}
+              title={isExpanded ? 'Collapse subgoals' : 'Expand subgoals'}
+            >
+              {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+            </button>
+          )}
+
+          <div style={{ flex: 1, marginRight: '0.375rem', minWidth: 0 }}>
+            {isEditing ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }} onClick={e => e.stopPropagation()}>
+                <input
+                  type="text"
+                  className="input-field"
+                  style={{ padding: '0.2rem 0.4rem', fontSize: '0.8125rem' }}
+                  value={editingGoalData.title}
+                  onChange={e => setEditingGoalData({ ...editingGoalData, title: e.target.value })}
+                />
+                <div style={{ display: 'flex', gap: '0.25rem' }}>
+                  <input
+                    type="date"
+                    className="input-field"
+                    style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem', flex: 1 }}
+                    value={editingGoalData.dueDate}
+                    onChange={e => setEditingGoalData({ ...editingGoalData, dueDate: e.target.value })}
+                  />
+                  <button className="btn btn-primary" style={{ padding: '0.2rem 0.4rem' }} onClick={(e) => saveGoalEdit(goal.id, e)}><Check size={12} /></button>
+                  <button className="btn" style={{ padding: '0.2rem 0.4rem' }} onClick={(e) => { e.stopPropagation(); setEditingGoalId(null); }}><X size={12} /></button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="goal-title">{goal.title}</div>
+                <div className="goal-date">
+                  {goal.dueDate ? `Due: ${format(new Date(goal.dueDate), 'MMM d, yyyy')}` : 'No date set'}
+                </div>
+              </>
+            )}
+          </div>
+
+          {!isEditing && (
+            <div className="goal-actions">
+              <button
+                className="btn-icon"
+                title="Edit goal"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditingGoalId(goal.id);
+                  setEditingGoalData({ title: goal.title, dueDate: goal.dueDate || '' });
+                }}
+              >
+                <Edit2 size={13} />
+              </button>
+              <button
+                className="btn-icon btn-icon-danger"
+                title="Delete goal"
+                onClick={(e) => { e.stopPropagation(); handleDeleteGoal(goal.id); }}
+              >
+                <Trash2 size={13} />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Subgoal children list (only on top-level goals) */}
+        {!isSubgoal && isExpanded && (
+          <div className="subgoal-list">
+            {children.map(sub => (
+              <GoalRow key={sub.id} goal={sub} isSubgoal={true} />
+            ))}
+
+            {/* Add subgoal inline form */}
+            {newSubgoalParentId === goal.id ? (
+              <form
+                className="subgoal-add-form"
+                onSubmit={(e) => handleAddGoal(e, goal.id)}
+                onClick={e => e.stopPropagation()}
+              >
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="Subgoal title..."
+                  value={newSubgoalTitle}
+                  onChange={e => setNewSubgoalTitle(e.target.value)}
+                  autoFocus
+                  required
+                  style={{ fontSize: '0.8rem', padding: '0.2rem 0.4rem' }}
+                />
+                <div style={{ display: 'flex', gap: '0.25rem' }}>
+                  <input
+                    type="date"
+                    className="input-field"
+                    style={{ flex: 1, fontSize: '0.7rem', padding: '0.2rem 0.4rem' }}
+                    value={newSubgoalDate}
+                    onChange={e => setNewSubgoalDate(e.target.value)}
+                    title="Due date (optional)"
+                  />
+                  <button type="submit" className="btn btn-primary" style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }}>
+                    <Check size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem' }}
+                    onClick={(e) => { e.stopPropagation(); setNewSubgoalParentId(null); setNewSubgoalTitle(''); setNewSubgoalDate(''); }}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <button
+                className="subgoal-add-btn"
+                onClick={(e) => { e.stopPropagation(); setNewSubgoalParentId(goal.id); }}
+                title="Add subgoal"
+              >
+                <Plus size={11} /> Add subgoal
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ── Header breadcrumb for selected goal ──────────────────────────────────────
+  const renderMainHeader = () => {
+    if (selectedGoalId === 'all') {
+      return (
+        <h3>
+          {taskStatusFilter === 'open' ? 'Open Tasks' : taskStatusFilter === 'completed' ? 'Completed Tasks' : 'All Tasks'}
+        </h3>
+      );
+    }
+
+    if (editingGoalId === selectedGoalId) {
+      return (
+        <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center', flex: 1, marginRight: '0.5rem' }}>
+          <input
+            type="text"
+            className="input-field"
+            style={{ flex: 1, fontSize: '0.975rem', fontWeight: 'bold', padding: '0.25rem 0.5rem' }}
+            value={editingGoalData.title}
+            onChange={e => setEditingGoalData({ ...editingGoalData, title: e.target.value })}
+            autoFocus
+          />
+          <input
+            type="date"
+            className="input-field"
+            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+            value={editingGoalData.dueDate}
+            onChange={e => setEditingGoalData({ ...editingGoalData, dueDate: e.target.value })}
+          />
+          <button className="btn btn-primary" style={{ padding: '0.25rem 0.5rem' }} onClick={() => saveGoalEdit(selectedGoalId)}><Check size={14} /></button>
+          <button className="btn" style={{ padding: '0.25rem 0.5rem' }} onClick={() => setEditingGoalId(null)}><X size={14} /></button>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+        {selectedGoalParent && (
+          <>
+            <span className="main-header-parent" onClick={() => setSelectedGoalId(selectedGoalParent.id)} title={`Go to ${selectedGoalParent.title}`}>
+              {selectedGoalParent.title}
+            </span>
+            <ChevronRight size={14} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
+          </>
+        )}
+        <h3 style={{ margin: 0 }}>
+          {selectedGoal?.title}
+          {taskStatusFilter === 'open' ? ' (Open)' : taskStatusFilter === 'completed' ? ' (Completed)' : ''}
+        </h3>
+        <button className="btn-icon" title="Edit goal" onClick={() => {
+          setEditingGoalId(selectedGoalId);
+          setEditingGoalData({ title: selectedGoal?.title || '', dueDate: selectedGoal?.dueDate || '' });
+        }}>
+          <Edit2 size={14} />
+        </button>
+      </div>
+    );
+  };
+
+  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="app-container">
       <header className="header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <button 
-            className="mobile-menu-btn" 
+          <button
+            className="mobile-menu-btn"
             onClick={() => setIsSidebarOpen(true)}
           >
             <Menu size={20} />
@@ -284,7 +567,7 @@ export default function Dashboard() {
 
       {/* Top Task Statistics Summary Bar (Acts as Filters) */}
       <div className="stats-summary-container">
-        <div 
+        <div
           className={`stat-card stat-card-total ${taskStatusFilter === 'all' && selectedGoalId !== 'deleted' ? 'active' : ''}`}
           onClick={handleSelectTotalFilter}
           title="Filter by All Tasks"
@@ -301,7 +584,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div 
+        <div
           className={`stat-card stat-card-open ${taskStatusFilter === 'open' && selectedGoalId !== 'deleted' ? 'active' : ''}`}
           onClick={handleSelectOpenFilter}
           title="Filter by Open Tasks"
@@ -318,7 +601,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div 
+        <div
           className={`stat-card stat-card-completed ${taskStatusFilter === 'completed' && selectedGoalId !== 'deleted' ? 'active' : ''}`}
           onClick={handleSelectCompletedFilter}
           title="Filter by Completed Tasks"
@@ -335,7 +618,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div 
+        <div
           className={`stat-card stat-card-deleted ${taskStatusFilter === 'deleted' || selectedGoalId === 'deleted' ? 'active' : ''}`}
           onClick={handleSelectDeletedFilter}
           title="Filter by Deleted Tasks"
@@ -363,19 +646,19 @@ export default function Dashboard() {
         <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
           <div className="card" style={{ marginBottom: '0.75rem' }}>
             <h3 style={{ marginBottom: '0.625rem' }}>My Goals</h3>
-            
-            <form onSubmit={handleAddGoal} style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginBottom: '0.875rem' }}>
-              <input 
-                type="text" 
-                className="input-field" 
-                placeholder="New Goal Title..." 
+
+            <form onSubmit={(e) => handleAddGoal(e)} style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginBottom: '0.875rem' }}>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="New Goal Title..."
                 value={newGoalTitle}
                 onChange={e => setNewGoalTitle(e.target.value)}
                 required
               />
               <div style={{ display: 'flex', gap: '0.375rem' }}>
-                <input 
-                  type="date" 
+                <input
+                  type="date"
                   className="input-field"
                   style={{ flex: 1, padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
                   value={newGoalDate}
@@ -389,7 +672,8 @@ export default function Dashboard() {
             </form>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-              <div 
+              {/* All Active Tasks */}
+              <div
                 className={`goal-item ${selectedGoalId === 'all' ? 'active' : ''}`}
                 onClick={() => {
                   setSelectedGoalId('all');
@@ -398,97 +682,33 @@ export default function Dashboard() {
               >
                 <div className="goal-title">All Active Tasks</div>
               </div>
-              
+
               {goals.length === 0 ? (
                 <div className="empty-state" style={{ padding: '0.75rem' }}>No goals yet. Create one above!</div>
               ) : (
-                goals.map(goal => (
-                  <div 
-                    key={goal.id} 
-                    className={`goal-item ${selectedGoalId === goal.id ? 'active' : ''}`}
-                    onClick={() => {
-                      if (editingGoalId !== goal.id) {
-                        setSelectedGoalId(goal.id);
-                        setIsSidebarOpen(false);
-                      }
-                    }}
-                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                  >
-                    <div style={{ flex: 1, marginRight: '0.375rem', minWidth: 0 }}>
-                      {editingGoalId === goal.id ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }} onClick={e => e.stopPropagation()}>
-                          <input 
-                            type="text" 
-                            className="input-field" 
-                            style={{ padding: '0.2rem 0.4rem', fontSize: '0.8125rem' }} 
-                            value={editingGoalData.title} 
-                            onChange={e => setEditingGoalData({...editingGoalData, title: e.target.value})} 
-                          />
-                          <div style={{ display: 'flex', gap: '0.25rem' }}>
-                            <input 
-                              type="date" 
-                              className="input-field" 
-                              style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem', flex: 1 }} 
-                              value={editingGoalData.dueDate} 
-                              onChange={e => setEditingGoalData({...editingGoalData, dueDate: e.target.value})} 
-                            />
-                            <button className="btn btn-primary" style={{ padding: '0.2rem 0.4rem' }} onClick={(e) => saveGoalEdit(goal.id, e)}><Check size={12}/></button>
-                            <button className="btn" style={{ padding: '0.2rem 0.4rem' }} onClick={(e) => { e.stopPropagation(); setEditingGoalId(null); }}><X size={12}/></button>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="goal-title">{goal.title}</div>
-                          <div className="goal-date">
-                            {goal.dueDate ? `Due: ${format(new Date(goal.dueDate), 'MMM d, yyyy')}` : 'No date set'}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    {editingGoalId !== goal.id && (
-                      <div className="goal-actions">
-                        <button 
-                          className="btn-icon" 
-                          title="Edit goal"
-                          onClick={(e) => { 
-                            e.stopPropagation(); 
-                            setEditingGoalId(goal.id); 
-                            setEditingGoalData({ title: goal.title, dueDate: goal.dueDate || '' }); 
-                          }}
-                        >
-                          <Edit2 size={13} />
-                        </button>
-                        <button 
-                          className="btn-icon btn-icon-danger" 
-                          title="Delete goal"
-                          onClick={(e) => { e.stopPropagation(); handleDeleteGoal(goal.id); }}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                topLevelGoals.map(goal => (
+                  <GoalRow key={goal.id} goal={goal} isSubgoal={false} />
                 ))
               )}
 
               {/* Trash / Deleted Tasks Sidebar Nav */}
-              <div 
+              <div
                 className={`goal-item ${selectedGoalId === 'deleted' ? 'active' : ''}`}
                 onClick={() => {
                   setSelectedGoalId('deleted');
                   setIsSidebarOpen(false);
                 }}
-                style={{ 
-                  marginTop: '0.5rem', 
-                  borderTop: '1px solid var(--border-color)', 
-                  paddingTop: '0.5rem', 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  alignItems: 'center' 
+                style={{
+                  marginTop: '0.5rem',
+                  borderTop: '1px solid var(--border-color)',
+                  paddingTop: '0.5rem',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
                 }}
               >
                 <div className="goal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', color: selectedGoalId === 'deleted' ? 'var(--danger-color)' : 'inherit' }}>
-                  <Trash2 size={14} color={selectedGoalId === 'deleted' ? 'var(--danger-color)' : 'var(--text-secondary)'} /> 
+                  <Trash2 size={14} color={selectedGoalId === 'deleted' ? 'var(--danger-color)' : 'var(--text-secondary)'} />
                   Deleted Tasks
                 </div>
                 <span className="priority-badge priority-high" style={{ fontSize: '0.7rem', padding: '0.05rem 0.35rem' }}>
@@ -523,13 +743,13 @@ export default function Dashboard() {
                       <div className="checkbox-container" style={{ opacity: 0.6 }}>
                         <Trash2 size={16} color="var(--danger-color)" />
                       </div>
-                      
+
                       <div className="task-content">
                         <div className="task-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span className="task-title-text">{task.title}</span>
                           {task.description && (
-                            <button 
-                              className="btn-icon" 
+                            <button
+                              className="btn-icon"
                               onClick={(e) => { e.stopPropagation(); toggleTaskExpansion(task.id); }}
                               title={expandedTasks.includes(task.id) ? "Hide details" : "Show details"}
                             >
@@ -537,7 +757,7 @@ export default function Dashboard() {
                             </button>
                           )}
                         </div>
-                        
+
                         {expandedTasks.includes(task.id) && task.description && (
                           <div className="task-description">
                             {task.description}
@@ -545,9 +765,7 @@ export default function Dashboard() {
                         )}
 
                         <div className="task-meta">
-                          <span className="task-goal-badge">
-                            <Target size={11} /> {goals.find(g => g.id === task.goalId)?.title || 'Unassigned Goal'}
-                          </span>
+                          <TaskGoalBadge task={task} />
                           <span className={`priority-badge priority-${task.priority?.toLowerCase() || 'low'}`}>
                             {task.priority || 'Low'} Priority
                           </span>
@@ -556,16 +774,16 @@ export default function Dashboard() {
                       </div>
 
                       <div className="task-actions">
-                        <button 
-                          className="btn btn-primary" 
+                        <button
+                          className="btn btn-primary"
                           style={{ padding: '0.2rem 0.45rem', fontSize: '0.725rem' }}
                           onClick={() => restoreTask(task.id)}
                           title="Restore task to active list"
                         >
                           <RotateCcw size={12} /> Restore
                         </button>
-                        <button 
-                          className="btn-icon btn-icon-danger" 
+                        <button
+                          className="btn-icon btn-icon-danger"
                           onClick={() => permanentlyDeleteTask(task.id)}
                           title="Delete permanently"
                         >
@@ -581,70 +799,30 @@ export default function Dashboard() {
             /* Active Tasks View */
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
-                {selectedGoalId === 'all' ? (
-                  <h3>
-                    {taskStatusFilter === 'open' ? 'Open Tasks' : taskStatusFilter === 'completed' ? 'Completed Tasks' : 'All Tasks'}
-                  </h3>
-                ) : (
-                  editingGoalId === selectedGoalId ? (
-                    <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center', flex: 1, marginRight: '0.5rem' }}>
-                      <input 
-                        type="text" 
-                        className="input-field" 
-                        style={{ flex: 1, fontSize: '0.975rem', fontWeight: 'bold', padding: '0.25rem 0.5rem' }} 
-                        value={editingGoalData.title} 
-                        onChange={e => setEditingGoalData({...editingGoalData, title: e.target.value})} 
-                        autoFocus
-                      />
-                      <input 
-                        type="date" 
-                        className="input-field" 
-                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} 
-                        value={editingGoalData.dueDate} 
-                        onChange={e => setEditingGoalData({...editingGoalData, dueDate: e.target.value})} 
-                      />
-                      <button className="btn btn-primary" style={{ padding: '0.25rem 0.5rem' }} onClick={() => saveGoalEdit(selectedGoalId)}><Check size={14}/></button>
-                      <button className="btn" style={{ padding: '0.25rem 0.5rem' }} onClick={() => setEditingGoalId(null)}><X size={14}/></button>
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <h3>
-                        {goals.find(g => g.id === selectedGoalId)?.title}
-                        {taskStatusFilter === 'open' ? ' (Open)' : taskStatusFilter === 'completed' ? ' (Completed)' : ''}
-                      </h3>
-                      <button className="btn-icon" title="Edit goal" onClick={() => { 
-                        const goal = goals.find(g => g.id === selectedGoalId);
-                        setEditingGoalId(selectedGoalId); 
-                        setEditingGoalData({ title: goal?.title || '', dueDate: goal?.dueDate || '' }); 
-                      }}>
-                        <Edit2 size={14} />
-                      </button>
-                    </div>
-                  )
-                )}
+                {renderMainHeader()}
                 {selectedGoalId !== 'all' && editingGoalId !== selectedGoalId && (
                   <span className="goal-date">
-                    {goals.find(g => g.id === selectedGoalId)?.dueDate 
-                      ? `Due: ${format(new Date(goals.find(g => g.id === selectedGoalId).dueDate), 'MMM d, yyyy')}` 
+                    {selectedGoal?.dueDate
+                      ? `Due: ${format(new Date(selectedGoal.dueDate), 'MMM d, yyyy')}`
                       : ''}
                   </span>
                 )}
               </div>
-              
+
               {selectedGoalId !== 'all' && (
                 <form onSubmit={handleAddTask} style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginBottom: '0.875rem' }}>
                   <div style={{ display: 'flex', gap: '0.375rem' }}>
-                    <input 
-                      type="text" 
-                      className="input-field" 
+                    <input
+                      type="text"
+                      className="input-field"
                       style={{ flex: 1 }}
-                      placeholder="What needs to be done?" 
+                      placeholder="What needs to be done?"
                       value={newTaskTitle}
                       onChange={e => setNewTaskTitle(e.target.value)}
                       required
                     />
-                    <select 
-                      className="input-field" 
+                    <select
+                      className="input-field"
                       value={newTaskPriority}
                       onChange={e => setNewTaskPriority(e.target.value)}
                       style={{ width: '95px' }}
@@ -663,9 +841,9 @@ export default function Dashboard() {
                     style={{ resize: 'vertical', fontSize: '0.8125rem' }}
                   />
                   <div style={{ display: 'flex', gap: '0.375rem' }}>
-                    <input 
-                      type="date" 
-                      className="input-field" 
+                    <input
+                      type="date"
+                      className="input-field"
                       style={{ flex: 1, fontSize: '0.75rem' }}
                       value={newTaskDate}
                       onChange={e => setNewTaskDate(e.target.value)}
@@ -681,10 +859,10 @@ export default function Dashboard() {
               <div>
                 {displayedActiveTasks.length === 0 ? (
                   <div className="empty-state">
-                    {taskStatusFilter === 'open' 
-                      ? 'No open tasks matching this view.' 
-                      : taskStatusFilter === 'completed' 
-                      ? 'No completed tasks matching this view.' 
+                    {taskStatusFilter === 'open'
+                      ? 'No open tasks matching this view.'
+                      : taskStatusFilter === 'completed'
+                      ? 'No completed tasks matching this view.'
                       : 'No tasks for this view yet.'}
                   </div>
                 ) : (
@@ -697,45 +875,45 @@ export default function Dashboard() {
                           <Circle size={18} color="var(--text-secondary)" />
                         )}
                       </div>
-                      
+
                       <div className="task-content">
                         {editingTaskId === task.id ? (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', flex: 1 }}>
-                            <input 
-                              type="text" 
-                              className="input-field" 
-                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.85rem' }} 
-                              value={editingTaskData.title} 
-                              onChange={e => setEditingTaskData({...editingTaskData, title: e.target.value})} 
+                            <input
+                              type="text"
+                              className="input-field"
+                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.85rem' }}
+                              value={editingTaskData.title}
+                              onChange={e => setEditingTaskData({ ...editingTaskData, title: e.target.value })}
                             />
                             <textarea
                               className="input-field"
                               placeholder="Description..."
                               value={editingTaskData.description}
-                              onChange={e => setEditingTaskData({...editingTaskData, description: e.target.value})}
+                              onChange={e => setEditingTaskData({ ...editingTaskData, description: e.target.value })}
                               rows="2"
                               style={{ resize: 'vertical', padding: '0.25rem 0.5rem', fontSize: '0.8125rem' }}
                             />
                             <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
-                              <select 
-                                className="input-field" 
-                                style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', width: 'auto' }} 
-                                value={editingTaskData.priority} 
-                                onChange={e => setEditingTaskData({...editingTaskData, priority: e.target.value})}
+                              <select
+                                className="input-field"
+                                style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', width: 'auto' }}
+                                value={editingTaskData.priority}
+                                onChange={e => setEditingTaskData({ ...editingTaskData, priority: e.target.value })}
                               >
                                 <option value="Low">Low</option>
                                 <option value="Medium">Med</option>
                                 <option value="High">High</option>
                               </select>
-                              <input 
-                                type="date" 
-                                className="input-field" 
-                                style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', flex: 1 }} 
-                                value={editingTaskData.dueDate} 
-                                onChange={e => setEditingTaskData({...editingTaskData, dueDate: e.target.value})} 
+                              <input
+                                type="date"
+                                className="input-field"
+                                style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', flex: 1 }}
+                                value={editingTaskData.dueDate}
+                                onChange={e => setEditingTaskData({ ...editingTaskData, dueDate: e.target.value })}
                               />
-                              <button className="btn btn-primary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={() => saveTaskEdit(task.id)}><Check size={12}/> Save</button>
-                              <button className="btn" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={() => setEditingTaskId(null)}><X size={12}/> Cancel</button>
+                              <button className="btn btn-primary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={() => saveTaskEdit(task.id)}><Check size={12} /> Save</button>
+                              <button className="btn" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={() => setEditingTaskId(null)}><X size={12} /> Cancel</button>
                             </div>
                           </div>
                         ) : (
@@ -743,9 +921,9 @@ export default function Dashboard() {
                             <div className="task-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <span className="task-title-text">{task.title}</span>
                               {task.description && (
-                                <button 
-                                  className="btn-icon" 
-                                  style={{ marginLeft: '0.375rem' }} 
+                                <button
+                                  className="btn-icon"
+                                  style={{ marginLeft: '0.375rem' }}
                                   onClick={(e) => { e.stopPropagation(); toggleTaskExpansion(task.id); }}
                                   title={expandedTasks.includes(task.id) ? "Hide details" : "Show details"}
                                 >
@@ -753,7 +931,7 @@ export default function Dashboard() {
                                 </button>
                               )}
                             </div>
-                            
+
                             {expandedTasks.includes(task.id) && task.description && (
                               <div className="task-description">
                                 {task.description}
@@ -761,11 +939,7 @@ export default function Dashboard() {
                             )}
 
                             <div className="task-meta">
-                              {selectedGoalId === 'all' && task.goalId && (
-                                <span className="task-goal-badge">
-                                  <Target size={11} /> {goals.find(g => g.id === task.goalId)?.title || 'Unknown Goal'}
-                                </span>
-                              )}
+                              <TaskGoalBadge task={task} />
                               <span className={`priority-badge priority-${task.priority?.toLowerCase() || 'low'}`}>
                                 {task.priority || 'Low'} Priority
                               </span>
@@ -777,18 +951,18 @@ export default function Dashboard() {
 
                       {editingTaskId !== task.id && (
                         <div className="task-actions">
-                          <button 
-                            className="btn-icon" 
+                          <button
+                            className="btn-icon"
                             title="Edit task"
-                            onClick={() => { 
-                              setEditingTaskId(task.id); 
-                              setEditingTaskData({ title: task.title, description: task.description || '', priority: task.priority || 'Low', dueDate: task.dueDate || '' }); 
+                            onClick={() => {
+                              setEditingTaskId(task.id);
+                              setEditingTaskData({ title: task.title, description: task.description || '', priority: task.priority || 'Low', dueDate: task.dueDate || '' });
                             }}
                           >
                             <Edit2 size={14} />
                           </button>
-                          <button 
-                            className="btn-icon btn-icon-danger" 
+                          <button
+                            className="btn-icon btn-icon-danger"
                             title="Move to trash"
                             onClick={() => softDeleteTask(task.id)}
                           >
@@ -811,4 +985,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
