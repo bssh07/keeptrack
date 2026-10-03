@@ -53,7 +53,7 @@ export default function Dashboard() {
       }
     });
     return () => unsubscribe();
-  }, [auth.currentUser, selectedGoalId]);
+  }, [auth.currentUser?.uid, selectedGoalId]);
 
   // Fetch Tasks
   useEffect(() => {
@@ -87,7 +87,7 @@ export default function Dashboard() {
       console.error("Error listening to tasks:", error);
     });
     return () => unsubscribe();
-  }, [auth.currentUser]);
+  }, [auth.currentUser?.uid]);
 
   const handleAddGoal = async (e) => {
     e.preventDefault();
@@ -240,15 +240,15 @@ export default function Dashboard() {
             className="mobile-menu-btn" 
             onClick={() => setIsSidebarOpen(true)}
           >
-            <Menu size={24} />
+            <Menu size={20} />
           </button>
-          <Target className="text-primary-color" style={{ color: 'var(--primary-color)' }} />
+          <Target style={{ color: 'var(--primary-color)' }} size={20} />
           <h2>KeepTrack</h2>
         </div>
         <div className="header-actions">
           <span className="user-email">{auth.currentUser?.email}</span>
-          <button className="btn btn-danger" onClick={() => auth.signOut()}>
-            <LogOut size={16} /> Logout
+          <button className="btn btn-danger" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} onClick={() => auth.signOut()}>
+            <LogOut size={13} /> Logout
           </button>
         </div>
       </header>
@@ -257,7 +257,7 @@ export default function Dashboard() {
       <div className="stats-summary-container">
         <div className="stat-card">
           <div className="stat-icon-wrapper stat-icon-total">
-            <ListTodo size={24} />
+            <ListTodo size={18} />
           </div>
           <div className="stat-info">
             <span className="stat-label">Total Tasks</span>
@@ -270,7 +270,7 @@ export default function Dashboard() {
 
         <div className="stat-card">
           <div className="stat-icon-wrapper stat-icon-open">
-            <Clock size={24} />
+            <Clock size={18} />
           </div>
           <div className="stat-info">
             <span className="stat-label">Open Tasks</span>
@@ -283,7 +283,7 @@ export default function Dashboard() {
 
         <div className="stat-card">
           <div className="stat-icon-wrapper stat-icon-completed">
-            <CheckCircle size={24} />
+            <CheckCircle size={18} />
           </div>
           <div className="stat-info">
             <span className="stat-label">Completed Tasks</span>
@@ -296,7 +296,7 @@ export default function Dashboard() {
 
         <div className="stat-card">
           <div className="stat-icon-wrapper stat-icon-deleted">
-            <Trash2 size={24} />
+            <Trash2 size={18} />
           </div>
           <div className="stat-info">
             <span className="stat-label">Deleted Tasks</span>
@@ -316,10 +316,10 @@ export default function Dashboard() {
 
         {/* Sidebar: Goals & Filters */}
         <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
-          <div className="card" style={{ marginBottom: '1rem' }}>
-            <h3 style={{ marginBottom: '1rem' }}>My Goals</h3>
+          <div className="card" style={{ marginBottom: '0.75rem' }}>
+            <h3 style={{ marginBottom: '0.625rem' }}>My Goals</h3>
             
-            <form onSubmit={handleAddGoal} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
+            <form onSubmit={handleAddGoal} style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginBottom: '0.875rem' }}>
               <input 
                 type="text" 
                 className="input-field" 
@@ -328,22 +328,22 @@ export default function Dashboard() {
                 onChange={e => setNewGoalTitle(e.target.value)}
                 required
               />
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', gap: '0.375rem' }}>
                 <input 
                   type="date" 
                   className="input-field"
-                  style={{ flex: 1 }}
+                  style={{ flex: 1, padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
                   value={newGoalDate}
                   onChange={e => setNewGoalDate(e.target.value)}
                   title="Due date (optional)"
                 />
-                <button type="submit" className="btn btn-primary" title="Add Goal">
-                  <Plus size={16} />
+                <button type="submit" className="btn btn-primary" title="Add Goal" style={{ padding: '0.25rem 0.5rem' }}>
+                  <Plus size={14} /> Add
                 </button>
               </div>
             </form>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
               <div 
                 className={`goal-item ${selectedGoalId === 'all' ? 'active' : ''}`}
                 onClick={() => {
@@ -355,7 +355,7 @@ export default function Dashboard() {
               </div>
               
               {goals.length === 0 ? (
-                <div className="empty-state" style={{ padding: '1rem' }}>No goals yet. Create one above!</div>
+                <div className="empty-state" style={{ padding: '0.75rem' }}>No goals yet. Create one above!</div>
               ) : (
                 goals.map(goal => (
                   <div 
@@ -367,15 +367,15 @@ export default function Dashboard() {
                         setIsSidebarOpen(false);
                       }
                     }}
-                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                   >
-                    <div style={{ flex: 1, marginRight: '0.5rem' }}>
+                    <div style={{ flex: 1, marginRight: '0.375rem', minWidth: 0 }}>
                       {editingGoalId === goal.id ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }} onClick={e => e.stopPropagation()}>
                           <input 
                             type="text" 
                             className="input-field" 
-                            style={{ padding: '0.25rem', fontSize: '0.875rem' }} 
+                            style={{ padding: '0.2rem 0.4rem', fontSize: '0.8125rem' }} 
                             value={editingGoalData.title} 
                             onChange={e => setEditingGoalData({...editingGoalData, title: e.target.value})} 
                           />
@@ -383,34 +383,44 @@ export default function Dashboard() {
                             <input 
                               type="date" 
                               className="input-field" 
-                              style={{ padding: '0.25rem', fontSize: '0.75rem', flex: 1 }} 
+                              style={{ padding: '0.2rem 0.4rem', fontSize: '0.7rem', flex: 1 }} 
                               value={editingGoalData.dueDate} 
                               onChange={e => setEditingGoalData({...editingGoalData, dueDate: e.target.value})} 
                             />
-                            <button className="btn btn-primary" style={{ padding: '0.25rem' }} onClick={(e) => saveGoalEdit(goal.id, e)}><Check size={14}/></button>
-                            <button className="btn" style={{ padding: '0.25rem' }} onClick={(e) => { e.stopPropagation(); setEditingGoalId(null); }}><X size={14}/></button>
+                            <button className="btn btn-primary" style={{ padding: '0.2rem 0.4rem' }} onClick={(e) => saveGoalEdit(goal.id, e)}><Check size={12}/></button>
+                            <button className="btn" style={{ padding: '0.2rem 0.4rem' }} onClick={(e) => { e.stopPropagation(); setEditingGoalId(null); }}><X size={12}/></button>
                           </div>
                         </div>
                       ) : (
                         <>
                           <div className="goal-title">{goal.title}</div>
-                          <div className="goal-date" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <div className="goal-date">
                             {goal.dueDate ? `Due: ${format(new Date(goal.dueDate), 'MMM d, yyyy')}` : 'No date set'}
-                            <button className="btn" style={{ padding: '0', border: 'none', background: 'transparent', height: 'auto' }} onClick={(e) => { e.stopPropagation(); setEditingGoalId(goal.id); setEditingGoalData({ title: goal.title, dueDate: goal.dueDate || '' }); }}>
-                              <Edit2 size={12} />
-                            </button>
                           </div>
                         </>
                       )}
                     </div>
                     {editingGoalId !== goal.id && (
-                      <button 
-                        className="btn btn-danger" 
-                        style={{ padding: '0.25rem', border: 'none', background: 'transparent' }}
-                        onClick={(e) => { e.stopPropagation(); handleDeleteGoal(goal.id); }}
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      <div className="goal-actions">
+                        <button 
+                          className="btn-icon" 
+                          title="Edit goal"
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setEditingGoalId(goal.id); 
+                            setEditingGoalData({ title: goal.title, dueDate: goal.dueDate || '' }); 
+                          }}
+                        >
+                          <Edit2 size={13} />
+                        </button>
+                        <button 
+                          className="btn-icon btn-icon-danger" 
+                          title="Delete goal"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteGoal(goal.id); }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 ))
@@ -424,19 +434,19 @@ export default function Dashboard() {
                   setIsSidebarOpen(false);
                 }}
                 style={{ 
-                  marginTop: '0.75rem', 
+                  marginTop: '0.5rem', 
                   borderTop: '1px solid var(--border-color)', 
-                  paddingTop: '0.75rem', 
+                  paddingTop: '0.5rem', 
                   display: 'flex', 
-                  justify: 'space-between', 
+                  justifyContent: 'space-between', 
                   alignItems: 'center' 
                 }}
               >
-                <div className="goal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: selectedGoalId === 'deleted' ? 'var(--danger-color)' : 'inherit' }}>
-                  <Trash2 size={16} color={selectedGoalId === 'deleted' ? 'var(--danger-color)' : 'var(--text-secondary)'} /> 
+                <div className="goal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', color: selectedGoalId === 'deleted' ? 'var(--danger-color)' : 'inherit' }}>
+                  <Trash2 size={14} color={selectedGoalId === 'deleted' ? 'var(--danger-color)' : 'var(--text-secondary)'} /> 
                   Deleted Tasks
                 </div>
-                <span className="priority-badge priority-high" style={{ fontSize: '0.75rem', padding: '0.125rem 0.4rem' }}>
+                <span className="priority-badge priority-high" style={{ fontSize: '0.7rem', padding: '0.05rem 0.35rem' }}>
                   {deletedTasksCount}
                 </span>
               </div>
@@ -449,9 +459,9 @@ export default function Dashboard() {
           {selectedGoalId === 'deleted' ? (
             /* Deleted Tasks List View */
             <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Trash2 size={22} color="var(--danger-color)" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                  <Trash2 size={18} color="var(--danger-color)" />
                   <h3>Deleted Tasks (Trash)</h3>
                 </div>
                 <span className="goal-date">
@@ -466,19 +476,19 @@ export default function Dashboard() {
                   displayedDeletedTasks.map(task => (
                     <div key={task.id} className="task-item" style={{ opacity: 0.9, borderColor: 'var(--border-color)' }}>
                       <div className="checkbox-container" style={{ opacity: 0.6 }}>
-                        <Trash2 size={20} color="var(--danger-color)" />
+                        <Trash2 size={16} color="var(--danger-color)" />
                       </div>
                       
                       <div className="task-content">
                         <div className="task-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span>{task.title}</span>
+                          <span className="task-title-text">{task.title}</span>
                           {task.description && (
                             <button 
-                              className="btn" 
-                              style={{ padding: '0', border: 'none', background: 'transparent', height: 'auto', marginLeft: '0.5rem', color: 'var(--text-secondary)' }} 
+                              className="btn-icon" 
                               onClick={(e) => { e.stopPropagation(); toggleTaskExpansion(task.id); }}
+                              title={expandedTasks.includes(task.id) ? "Hide details" : "Show details"}
                             >
-                              {expandedTasks.includes(task.id) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                              {expandedTasks.includes(task.id) ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                             </button>
                           )}
                         </div>
@@ -489,9 +499,9 @@ export default function Dashboard() {
                           </div>
                         )}
 
-                        <div className="task-meta" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
+                        <div className="task-meta">
                           <span className="task-goal-badge">
-                            <Target size={12} /> Goal: {goals.find(g => g.id === task.goalId)?.title || 'Unassigned / Deleted Goal'}
+                            <Target size={11} /> {goals.find(g => g.id === task.goalId)?.title || 'Unassigned Goal'}
                           </span>
                           <span className={`priority-badge priority-${task.priority?.toLowerCase() || 'low'}`}>
                             {task.priority || 'Low'} Priority
@@ -500,22 +510,21 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
+                      <div className="task-actions">
                         <button 
                           className="btn btn-primary" 
-                          style={{ padding: '0.375rem 0.625rem', fontSize: '0.75rem' }}
+                          style={{ padding: '0.2rem 0.45rem', fontSize: '0.725rem' }}
                           onClick={() => restoreTask(task.id)}
                           title="Restore task to active list"
                         >
-                          <RotateCcw size={14} /> Restore
+                          <RotateCcw size={12} /> Restore
                         </button>
                         <button 
-                          className="btn btn-danger" 
-                          style={{ padding: '0.375rem', border: 'none', background: 'transparent' }}
+                          className="btn-icon btn-icon-danger" 
                           onClick={() => permanentlyDeleteTask(task.id)}
                           title="Delete permanently"
                         >
-                          <Trash2 size={16} />
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
@@ -526,16 +535,16 @@ export default function Dashboard() {
           ) : selectedGoalId ? (
             /* Active Tasks View */
             <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
                 {selectedGoalId === 'all' ? (
                   <h3>All Tasks</h3>
                 ) : (
                   editingGoalId === selectedGoalId ? (
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flex: 1, marginRight: '1rem' }}>
+                    <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center', flex: 1, marginRight: '0.5rem' }}>
                       <input 
                         type="text" 
                         className="input-field" 
-                        style={{ flex: 1, fontSize: '1.17em', fontWeight: 'bold', padding: '0.25rem 0.5rem' }} 
+                        style={{ flex: 1, fontSize: '0.975rem', fontWeight: 'bold', padding: '0.25rem 0.5rem' }} 
                         value={editingGoalData.title} 
                         onChange={e => setEditingGoalData({...editingGoalData, title: e.target.value})} 
                         autoFocus
@@ -543,22 +552,22 @@ export default function Dashboard() {
                       <input 
                         type="date" 
                         className="input-field" 
-                        style={{ padding: '0.25rem 0.5rem' }} 
+                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} 
                         value={editingGoalData.dueDate} 
                         onChange={e => setEditingGoalData({...editingGoalData, dueDate: e.target.value})} 
                       />
-                      <button className="btn btn-primary" onClick={() => saveGoalEdit(selectedGoalId)}><Check size={18}/></button>
-                      <button className="btn" onClick={() => setEditingGoalId(null)}><X size={18}/></button>
+                      <button className="btn btn-primary" style={{ padding: '0.25rem 0.5rem' }} onClick={() => saveGoalEdit(selectedGoalId)}><Check size={14}/></button>
+                      <button className="btn" style={{ padding: '0.25rem 0.5rem' }} onClick={() => setEditingGoalId(null)}><X size={14}/></button>
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <h3>{goals.find(g => g.id === selectedGoalId)?.title}</h3>
-                      <button className="btn" style={{ padding: '0.25rem 0.5rem' }} onClick={() => { 
+                      <button className="btn-icon" title="Edit goal" onClick={() => { 
                         const goal = goals.find(g => g.id === selectedGoalId);
                         setEditingGoalId(selectedGoalId); 
                         setEditingGoalData({ title: goal?.title || '', dueDate: goal?.dueDate || '' }); 
                       }}>
-                        <Edit2 size={16} /> Edit Goal
+                        <Edit2 size={14} />
                       </button>
                     </div>
                   )
@@ -573,8 +582,8 @@ export default function Dashboard() {
               </div>
               
               {selectedGoalId !== 'all' && (
-                <form onSubmit={handleAddTask} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <form onSubmit={handleAddTask} style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginBottom: '0.875rem' }}>
+                  <div style={{ display: 'flex', gap: '0.375rem' }}>
                     <input 
                       type="text" 
                       className="input-field" 
@@ -588,7 +597,7 @@ export default function Dashboard() {
                       className="input-field" 
                       value={newTaskPriority}
                       onChange={e => setNewTaskPriority(e.target.value)}
-                      style={{ width: '110px' }}
+                      style={{ width: '95px' }}
                     >
                       <option value="Low">Low</option>
                       <option value="Medium">Med</option>
@@ -601,19 +610,19 @@ export default function Dashboard() {
                     value={newTaskDescription}
                     onChange={e => setNewTaskDescription(e.target.value)}
                     rows="2"
-                    style={{ resize: 'vertical' }}
+                    style={{ resize: 'vertical', fontSize: '0.8125rem' }}
                   />
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <div style={{ display: 'flex', gap: '0.375rem' }}>
                     <input 
                       type="date" 
                       className="input-field" 
-                      style={{ flex: 1 }}
+                      style={{ flex: 1, fontSize: '0.75rem' }}
                       value={newTaskDate}
                       onChange={e => setNewTaskDate(e.target.value)}
                       title="Due date (optional)"
                     />
-                    <button type="submit" className="btn btn-primary" style={{ minWidth: '110px' }}>
-                      <Plus size={16} /> Add
+                    <button type="submit" className="btn btn-primary" style={{ minWidth: '95px' }}>
+                      <Plus size={14} /> Add
                     </button>
                   </div>
                 </form>
@@ -627,19 +636,19 @@ export default function Dashboard() {
                     <div key={task.id} className={`task-item ${task.completed ? 'completed' : ''}`}>
                       <div className="checkbox-container" onClick={() => toggleTaskCompletion(task)}>
                         {task.completed ? (
-                          <CheckCircle size={20} color="var(--success-color)" />
+                          <CheckCircle size={18} color="var(--success-color)" />
                         ) : (
-                          <Circle size={20} color="var(--text-secondary)" />
+                          <Circle size={18} color="var(--text-secondary)" />
                         )}
                       </div>
                       
                       <div className="task-content">
                         {editingTaskId === task.id ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', flex: 1 }}>
                             <input 
                               type="text" 
                               className="input-field" 
-                              style={{ padding: '0.25rem', fontSize: '0.875rem' }} 
+                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.85rem' }} 
                               value={editingTaskData.title} 
                               onChange={e => setEditingTaskData({...editingTaskData, title: e.target.value})} 
                             />
@@ -648,44 +657,43 @@ export default function Dashboard() {
                               placeholder="Description..."
                               value={editingTaskData.description}
                               onChange={e => setEditingTaskData({...editingTaskData, description: e.target.value})}
-                              rows="3"
-                              style={{ resize: 'vertical', padding: '0.25rem', fontSize: '0.875rem' }}
+                              rows="2"
+                              style={{ resize: 'vertical', padding: '0.25rem 0.5rem', fontSize: '0.8125rem' }}
                             />
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
                               <select 
                                 className="input-field" 
-                                style={{ padding: '0.25rem', fontSize: '0.75rem', width: 'auto' }} 
+                                style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', width: 'auto' }} 
                                 value={editingTaskData.priority} 
                                 onChange={e => setEditingTaskData({...editingTaskData, priority: e.target.value})}
                               >
                                 <option value="Low">Low</option>
-                                <option value="Medium">Medium</option>
+                                <option value="Medium">Med</option>
                                 <option value="High">High</option>
                               </select>
                               <input 
                                 type="date" 
                                 className="input-field" 
-                                style={{ padding: '0.25rem', fontSize: '0.75rem', flex: 1 }} 
+                                style={{ padding: '0.2rem 0.4rem', fontSize: '0.75rem', flex: 1 }} 
                                 value={editingTaskData.dueDate} 
                                 onChange={e => setEditingTaskData({...editingTaskData, dueDate: e.target.value})} 
                               />
-                            </div>
-                            <div style={{ display: 'flex', gap: '0.25rem' }}>
-                              <button className="btn btn-primary" style={{ padding: '0.25rem' }} onClick={() => saveTaskEdit(task.id)}><Check size={14}/></button>
-                              <button className="btn" style={{ padding: '0.25rem' }} onClick={() => setEditingTaskId(null)}><X size={14}/></button>
+                              <button className="btn btn-primary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={() => saveTaskEdit(task.id)}><Check size={12}/> Save</button>
+                              <button className="btn" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={() => setEditingTaskId(null)}><X size={12}/> Cancel</button>
                             </div>
                           </div>
                         ) : (
                           <>
                             <div className="task-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span>{task.title}</span>
+                              <span className="task-title-text">{task.title}</span>
                               {task.description && (
                                 <button 
-                                  className="btn" 
-                                  style={{ padding: '0', border: 'none', background: 'transparent', height: 'auto', marginLeft: '0.5rem', color: 'var(--text-secondary)' }} 
+                                  className="btn-icon" 
+                                  style={{ marginLeft: '0.375rem' }} 
                                   onClick={(e) => { e.stopPropagation(); toggleTaskExpansion(task.id); }}
+                                  title={expandedTasks.includes(task.id) ? "Hide details" : "Show details"}
                                 >
-                                  {expandedTasks.includes(task.id) ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                  {expandedTasks.includes(task.id) ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                                 </button>
                               )}
                             </div>
@@ -696,33 +704,41 @@ export default function Dashboard() {
                               </div>
                             )}
 
-                            <div className="task-meta" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                            <div className="task-meta">
                               {selectedGoalId === 'all' && task.goalId && (
                                 <span className="task-goal-badge">
-                                  <Target size={12} /> Goal: {goals.find(g => g.id === task.goalId)?.title || 'Unknown'}
+                                  <Target size={11} /> {goals.find(g => g.id === task.goalId)?.title || 'Unknown Goal'}
                                 </span>
                               )}
                               <span className={`priority-badge priority-${task.priority?.toLowerCase() || 'low'}`}>
                                 {task.priority || 'Low'} Priority
                               </span>
                               {task.dueDate && <span>Due: {format(new Date(task.dueDate), 'MMM d, yyyy')}</span>}
-                              <button className="btn" style={{ padding: '0', border: 'none', background: 'transparent', height: 'auto' }} onClick={() => { setEditingTaskId(task.id); setEditingTaskData({ title: task.title, description: task.description || '', priority: task.priority || 'Low', dueDate: task.dueDate || '' }); }}>
-                                <Edit2 size={12} />
-                              </button>
                             </div>
                           </>
                         )}
                       </div>
 
                       {editingTaskId !== task.id && (
-                        <button 
-                          className="btn btn-danger" 
-                          style={{ padding: '0.25rem', border: 'none', background: 'transparent' }}
-                          onClick={() => softDeleteTask(task.id)}
-                          title="Move to trash"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <div className="task-actions">
+                          <button 
+                            className="btn-icon" 
+                            title="Edit task"
+                            onClick={() => { 
+                              setEditingTaskId(task.id); 
+                              setEditingTaskData({ title: task.title, description: task.description || '', priority: task.priority || 'Low', dueDate: task.dueDate || '' }); 
+                            }}
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button 
+                            className="btn-icon btn-icon-danger" 
+                            title="Move to trash"
+                            onClick={() => softDeleteTask(task.id)}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       )}
                     </div>
                   ))
@@ -730,7 +746,7 @@ export default function Dashboard() {
               </div>
             </div>
           ) : (
-            <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px' }}>
+            <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '200px' }}>
               <div className="empty-state">Select or create a goal to view tasks.</div>
             </div>
           )}
@@ -739,3 +755,4 @@ export default function Dashboard() {
     </div>
   );
 }
+
