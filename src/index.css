@@ -411,10 +411,41 @@ select.input-field {
   transition: all 0.15s ease;
   position: relative;
   overflow: hidden;
+  cursor: pointer;
+  user-select: none;
 }
 
 .stat-card:hover {
-  border-color: rgba(59, 130, 246, 0.3);
+  border-color: rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
+}
+
+.stat-card.active {
+  border-width: 1.5px;
+}
+
+.stat-card.active.stat-card-total {
+  border-color: #2563eb;
+  background-color: rgba(59, 130, 246, 0.04);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
+.stat-card.active.stat-card-open {
+  border-color: #d97706;
+  background-color: rgba(245, 158, 11, 0.04);
+  box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.2);
+}
+
+.stat-card.active.stat-card-completed {
+  border-color: #059669;
+  background-color: rgba(16, 185, 129, 0.04);
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2);
+}
+
+.stat-card.active.stat-card-deleted {
+  border-color: #dc2626;
+  background-color: rgba(239, 68, 68, 0.04);
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.2);
 }
 
 .stat-icon-wrapper {

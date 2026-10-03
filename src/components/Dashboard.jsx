@@ -8,6 +8,7 @@ export default function Dashboard() {
   const [goals, setGoals] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [selectedGoalId, setSelectedGoalId] = useState('all');
+  const [taskStatusFilter, setTaskStatusFilter] = useState('all'); // 'all' | 'open' | 'completed' | 'deleted'
 
   // Forms
   const [newGoalTitle, setNewGoalTitle] = useState('');
@@ -210,15 +211,23 @@ export default function Dashboard() {
   const activeTasks = tasks.filter(t => !t.deleted);
   const deletedTasks = tasks.filter(t => t.deleted === true);
 
-  const displayedActiveTasks = selectedGoalId === 'all' 
+  const goalActiveTasks = selectedGoalId === 'all' 
     ? activeTasks 
-    : (selectedGoalId === 'deleted' ? [] : activeTasks.filter(t => t.goalId === selectedGoalId));
+    : (selectedGoalId === 'deleted' ? activeTasks : activeTasks.filter(t => t.goalId === selectedGoalId));
 
-  const displayedDeletedTasks = selectedGoalId === 'deleted'
+  const goalDeletedTasks = selectedGoalId === 'deleted'
     ? deletedTasks
     : (selectedGoalId === 'all'
         ? deletedTasks
         : deletedTasks.filter(t => t.goalId === selectedGoalId));
+
+  const displayedActiveTasks = goalActiveTasks.filter(t => {
+    if (taskStatusFilter === 'open') return !t.completed;
+    if (taskStatusFilter === 'completed') return t.completed;
+    return true;
+  });
+
+  const displayedDeletedTasks = goalDeletedTasks;
 
   const totalActiveCount = activeTasks.length;
   const openTasksCount = activeTasks.filter(t => !t.completed).length;
@@ -227,10 +236,30 @@ export default function Dashboard() {
 
   const isGoalFiltered = selectedGoalId !== 'all' && selectedGoalId !== 'deleted';
 
-  const filteredTotalCount = isGoalFiltered ? displayedActiveTasks.length : totalActiveCount;
-  const filteredOpenCount = isGoalFiltered ? displayedActiveTasks.filter(t => !t.completed).length : openTasksCount;
-  const filteredCompletedCount = isGoalFiltered ? displayedActiveTasks.filter(t => t.completed).length : completedTasksCount;
-  const filteredDeletedCount = isGoalFiltered ? displayedDeletedTasks.length : deletedTasksCount;
+  const filteredTotalCount = isGoalFiltered ? goalActiveTasks.length : totalActiveCount;
+  const filteredOpenCount = isGoalFiltered ? goalActiveTasks.filter(t => !t.completed).length : openTasksCount;
+  const filteredCompletedCount = isGoalFiltered ? goalActiveTasks.filter(t => t.completed).length : completedTasksCount;
+  const filteredDeletedCount = isGoalFiltered ? goalDeletedTasks.length : deletedTasksCount;
+
+  const handleSelectTotalFilter = () => {
+    setTaskStatusFilter('all');
+    if (selectedGoalId === 'deleted') setSelectedGoalId('all');
+  };
+
+  const handleSelectOpenFilter = () => {
+    setTaskStatusFilter('open');
+    if (selectedGoalId === 'deleted') setSelectedGoalId('all');
+  };
+
+  const handleSelectCompletedFilter = () => {
+    setTaskStatusFilter('completed');
+    if (selectedGoalId === 'deleted') setSelectedGoalId('all');
+  };
+
+  const handleSelectDeletedFilter = () => {
+    setTaskStatusFilter('deleted');
+    setSelectedGoalId('deleted');
+  };
 
   return (
     <div className="app-container">
@@ -253,9 +282,13 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Top Task Statistics Summary Bar */}
+      {/* Top Task Statistics Summary Bar (Acts as Filters) */}
       <div className="stats-summary-container">
-        <div className="stat-card">
+        <div 
+          className={`stat-card stat-card-total ${taskStatusFilter === 'all' && selectedGoalId !== 'deleted' ? 'active' : ''}`}
+          onClick={handleSelectTotalFilter}
+          title="Filter by All Tasks"
+        >
           <div className="stat-icon-wrapper stat-icon-total">
             <ListTodo size={18} />
           </div>
@@ -268,7 +301,11 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="stat-card">
+        <div 
+          className={`stat-card stat-card-open ${taskStatusFilter === 'open' && selectedGoalId !== 'deleted' ? 'active' : ''}`}
+          onClick={handleSelectOpenFilter}
+          title="Filter by Open Tasks"
+        >
           <div className="stat-icon-wrapper stat-icon-open">
             <Clock size={18} />
           </div>
@@ -281,7 +318,11 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="stat-card">
+        <div 
+          className={`stat-card stat-card-completed ${taskStatusFilter === 'completed' && selectedGoalId !== 'deleted' ? 'active' : ''}`}
+          onClick={handleSelectCompletedFilter}
+          title="Filter by Completed Tasks"
+        >
           <div className="stat-icon-wrapper stat-icon-completed">
             <CheckCircle size={18} />
           </div>
@@ -294,7 +335,11 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="stat-card">
+        <div 
+          className={`stat-card stat-card-deleted ${taskStatusFilter === 'deleted' || selectedGoalId === 'deleted' ? 'active' : ''}`}
+          onClick={handleSelectDeletedFilter}
+          title="Filter by Deleted Tasks"
+        >
           <div className="stat-icon-wrapper stat-icon-deleted">
             <Trash2 size={18} />
           </div>
@@ -537,7 +582,9 @@ export default function Dashboard() {
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
                 {selectedGoalId === 'all' ? (
-                  <h3>All Tasks</h3>
+                  <h3>
+                    {taskStatusFilter === 'open' ? 'Open Tasks' : taskStatusFilter === 'completed' ? 'Completed Tasks' : 'All Tasks'}
+                  </h3>
                 ) : (
                   editingGoalId === selectedGoalId ? (
                     <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center', flex: 1, marginRight: '0.5rem' }}>
@@ -561,7 +608,10 @@ export default function Dashboard() {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <h3>{goals.find(g => g.id === selectedGoalId)?.title}</h3>
+                      <h3>
+                        {goals.find(g => g.id === selectedGoalId)?.title}
+                        {taskStatusFilter === 'open' ? ' (Open)' : taskStatusFilter === 'completed' ? ' (Completed)' : ''}
+                      </h3>
                       <button className="btn-icon" title="Edit goal" onClick={() => { 
                         const goal = goals.find(g => g.id === selectedGoalId);
                         setEditingGoalId(selectedGoalId); 
@@ -630,7 +680,13 @@ export default function Dashboard() {
 
               <div>
                 {displayedActiveTasks.length === 0 ? (
-                  <div className="empty-state">No tasks for this goal yet. Add one above!</div>
+                  <div className="empty-state">
+                    {taskStatusFilter === 'open' 
+                      ? 'No open tasks matching this view.' 
+                      : taskStatusFilter === 'completed' 
+                      ? 'No completed tasks matching this view.' 
+                      : 'No tasks for this view yet.'}
+                  </div>
                 ) : (
                   displayedActiveTasks.map(task => (
                     <div key={task.id} className={`task-item ${task.completed ? 'completed' : ''}`}>
