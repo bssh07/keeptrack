@@ -492,7 +492,7 @@ select.input-field {
 .stats-summary-container {
   padding: 0.75rem 1.25rem 0.25rem 1.25rem;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 0.625rem;
 }
 
@@ -533,6 +533,12 @@ select.input-field {
   box-shadow: 0 0 0 2px rgba(217, 119, 6, 0.2);
 }
 
+.stat-card.active.stat-card-inprogress {
+  border-color: #7c3aed;
+  background-color: rgba(124, 58, 237, 0.04);
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.2);
+}
+
 .stat-card.active.stat-card-completed {
   border-color: #059669;
   background-color: rgba(16, 185, 129, 0.04);
@@ -563,6 +569,11 @@ select.input-field {
 .stat-icon-open {
   background: rgba(245, 158, 11, 0.12);
   color: #d97706;
+}
+
+.stat-icon-inprogress {
+  background: rgba(124, 58, 237, 0.12);
+  color: #7c3aed;
 }
 
 .stat-icon-completed {
@@ -605,6 +616,31 @@ select.input-field {
   margin-top: 0.05rem;
 }
 
+/* In-Progress task item highlight */
+.task-item.in-progress {
+  border-left: 3px solid #7c3aed;
+  background-color: rgba(124, 58, 237, 0.03);
+}
+
+/* In-Progress badge in task meta */
+.inprogress-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.05rem 0.375rem;
+  border-radius: 0.25rem;
+  background-color: rgba(124, 58, 237, 0.12);
+  color: #7c3aed;
+  font-weight: 600;
+  font-size: 0.7rem;
+}
+
+/* In-Progress button active state */
+.btn-icon-inprogress {
+  color: #7c3aed !important;
+  background-color: rgba(124, 58, 237, 0.1) !important;
+}
+
 .task-goal-badge {
   display: inline-flex;
   align-items: center;
@@ -627,9 +663,19 @@ select.input-field {
   margin: 0 0.05rem;
 }
 
+.due-overdue {
+  color: #dc2626 !important;
+  font-weight: 600;
+}
+
+.due-today {
+  color: #d97706 !important;
+  font-weight: 600;
+}
+
 @media (max-width: 1024px) {
   .stats-summary-container {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
@@ -653,5 +699,238 @@ select.input-field {
   .stat-value {
     font-size: 1.1rem;
   }
+}
+
+/* ── Goal & Milestone Progress Bars ── */
+.goal-mini-progress-wrapper {
+  margin-top: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.goal-mini-progress-track {
+  width: 100%;
+  height: 4px;
+  background-color: #e2e8f0;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.goal-mini-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+  border-radius: 9999px;
+  transition: width 0.35s ease;
+}
+
+.goal-mini-progress-fill.complete {
+  background: #10b981;
+}
+
+.goal-mini-progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+}
+
+.goal-mini-progress-percent {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.goal-mini-progress-percent.complete {
+  color: #059669;
+}
+
+.goal-progress-empty {
+  font-size: 0.6875rem;
+  color: #94a3b8;
+  margin-top: 0.2rem;
+}
+
+/* Main Goal Progress Header Card */
+.goal-progress-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+  border: 1px solid var(--border-color);
+  border-radius: 0.625rem;
+  padding: 0.875rem 1rem;
+  margin-bottom: 0.875rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s ease;
+}
+
+.goal-progress-card.complete {
+  border-color: #a7f3d0;
+  background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+}
+
+.goal-progress-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.65rem;
+}
+
+.goal-progress-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.goal-progress-status-badge {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.badge-complete {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.725rem;
+  font-weight: 600;
+  color: #059669;
+  background: #ecfdf5;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid #a7f3d0;
+}
+
+.badge-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.725rem;
+  font-weight: 600;
+  color: #2563eb;
+  background: #eff6ff;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid #dbeafe;
+}
+
+.badge-not-started {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.725rem;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid #e2e8f0;
+}
+
+.goal-progress-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+
+.goal-progress-card-subtitle {
+  font-size: 0.775rem;
+  color: var(--text-secondary);
+  margin-top: 0.2rem;
+}
+
+.goal-progress-metric-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  height: 50px;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  flex-shrink: 0;
+}
+
+.goal-progress-metric-pill.complete {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+}
+
+.goal-progress-number {
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--primary-color);
+}
+
+.goal-progress-number.complete {
+  color: #059669;
+}
+
+.goal-progress-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 0.15rem;
+}
+
+.goal-progress-track {
+  width: 100%;
+  height: 7px;
+  background: #e2e8f0;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.goal-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+  border-radius: 9999px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.goal-progress-bar.complete {
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+}
+
+/* Overall Progress Strip for All Tasks */
+.overall-progress-card {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.875rem;
+}
+
+.overall-progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.775rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.4rem;
+}
+
+.overall-progress-info strong {
+  color: var(--text-primary);
+}
+
+.overall-progress-track {
+  width: 100%;
+  height: 6px;
+  background-color: #e2e8f0;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.overall-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6 0%, #10b981 100%);
+  border-radius: 9999px;
+  transition: width 0.4s ease;
 }
 

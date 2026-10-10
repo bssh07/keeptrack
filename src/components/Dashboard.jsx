@@ -1,8 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { auth, db } from '../firebase';
 import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, doc, deleteDoc } from 'firebase/firestore';
-import { LogOut, Plus, Trash2, CheckCircle, Circle, Target, Edit2, X, Check, Menu, ChevronDown, ChevronUp, ChevronRight, ListTodo, Clock, RotateCcw, GitBranch } from 'lucide-react';
+import { LogOut, Plus, Trash2, CheckCircle, Circle, Target, Edit2, X, Check, Menu, ChevronDown, ChevronUp, ChevronRight, ListTodo, Clock, RotateCcw, Play } from 'lucide-react';
 import { format } from 'date-fns';
+
+const priorityWeight = { High: 3, Medium: 2, Low: 1 };
+
+const parseLocalDate = (dateStr) => {
+  if (!dateStr) return null;
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  }
+  return new Date(dateStr);
+};
 
 export default function Dashboard() {
   const [goals, setGoals] = useState([]);
@@ -77,22 +88,6 @@ export default function Dashboard() {
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const tasksData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const priorityWeight = { High: 3, Medium: 2, Low: 1 };
-
-      // Sort: incomplete first, then by priority, then by creation date
-      tasksData.sort((a, b) => {
-        if (a.completed !== b.completed) {
-          return a.completed ? 1 : -1;
-        }
-        const priorityA = priorityWeight[a.priority] || 1;
-        const priorityB = priorityWeight[b.priority] || 1;
-        if (priorityA !== priorityB) {
-          return priorityB - priorityA;
-        }
-        const timeA = typeof a.createdAt?.toMillis === 'function' ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
-        const timeB = typeof b.createdAt?.toMillis === 'function' ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
-        return timeA - timeB;
-      });
       setTasks(tasksData);
     }, (error) => {
       console.error("Error listening to tasks:", error);
@@ -216,6 +211,16 @@ export default function Dashboard() {
     }
   };
 
+  const toggleTaskInProgress = async (task) => {
+    try {
+      await updateDoc(doc(db, 'tasks', task.id), {
+        inProgress: !task.inProgress
+      });
+    } catch (error) {
+      console.error("Error toggling in-progress", error);
+    }
+  };
+
   const saveTaskEdit = async (id) => {
     try {
       await updateDoc(doc(db, 'tasks', id), {
@@ -261,22 +266,160 @@ export default function Dashboard() {
     }
   };
 
-  // ── Task Collections ─────────────────────────────────────────────────────────
-  const activeTasks = tasks.filter(t => !t.deleted);
-  const deletedTasks = tasks.filter(t => t.deleted === true);
+  // ── Task Collections & Sorting (Option 2: Urgency-First | Approach B: Flat List with Goal Tie-Breaker) ──
+  const sortedTasks = useMemo(() => {
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const goalNameMap = {};
+    goals.forEach(g => {
+      goalNameMap[g.id] = (g.title || '').trim().toLowerCase();
+    });
+
+    return [...tasks].sort((a, b) => {
+      // 1. Completion: Incomplete tasks float above completed tasks
+      if (a.completed !== b.completed) {
+        return a.completed ? 1 : -1;
+      }
+
+      // If both completed, sort chronologically by dueDate then priority
+      if (a.completed && b.completed) {
+        if (a.dueDate && b.dueDate && a.dueDate !== b.dueDate) {
+          return a.dueDate.localeCompare(b.dueDate);
+        }
+        const pA = priorityWeight[a.priority] || 1;
+        const pB = priorityWeight[b.priority] || 1;
+        if (pA !== pB) return pB - pA;
+        return 0;
+      }
+
+      // Tiers for active tasks:
+      // Tier 1: Overdue or Due Today (dueDate <= todayStr)
+      // Tier 2: In-Progress (future due date or no due date)
+      // Tier 3: Upcoming Due Date (dueDate > todayStr)
+      // Tier 4: No Due Date
+      const getTier = (t) => {
+        if (t.dueDate && t.dueDate <= todayStr) return 1;
+        if (t.inProgress) return 2;
+        if (t.dueDate) return 3;
+        return 4;
+      };
+
+      const tierA = getTier(a);
+      const tierB = getTier(b);
+
+      if (tierA !== tierB) {
+        return tierA - tierB;
+      }
+
+      // Inside Tier 1 (Overdue / Due Today):
+      if (tierA === 1) {
+        // In-progress tasks among overdue/today float to the top
+        const aIP = !!a.inProgress;
+        const bIP = !!b.inProgress;
+        if (aIP !== bIP) return aIP ? -1 : 1;
+
+        // Chronological: earliest overdue date first
+        if (a.dueDate !== b.dueDate) {
+          return a.dueDate.localeCompare(b.dueDate);
+        }
+      }
+
+      // Inside Tier 2 (In-Progress):
+      if (tierA === 2) {
+        // In-progress with due date comes before in-progress without due date
+        const aHasDue = !!a.dueDate;
+        const bHasDue = !!b.dueDate;
+        if (aHasDue !== bHasDue) return aHasDue ? -1 : 1;
+
+        // If both have due date, earliest first
+        if (a.dueDate && b.dueDate && a.dueDate !== b.dueDate) {
+          return a.dueDate.localeCompare(b.dueDate);
+        }
+      }
+
+      // Inside Tier 3 (Upcoming Due Dates):
+      if (tierA === 3) {
+        // Chronological: earliest due date first
+        if (a.dueDate !== b.dueDate) {
+          return a.dueDate.localeCompare(b.dueDate);
+        }
+      }
+
+      // Common tie-breakers:
+      // 1. Priority (High > Medium > Low)
+      const priorityA = priorityWeight[a.priority] || 1;
+      const priorityB = priorityWeight[b.priority] || 1;
+      if (priorityA !== priorityB) {
+        return priorityB - priorityA;
+      }
+
+      // 2. Goal Name (Alphabetical A to Z)
+      const goalA = goalNameMap[a.goalId] || '';
+      const goalB = goalNameMap[b.goalId] || '';
+      if (goalA !== goalB) {
+        return goalA.localeCompare(goalB);
+      }
+
+      // 3. Creation Time (Oldest first)
+      const timeA = typeof a.createdAt?.toMillis === 'function' ? a.createdAt.toMillis() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+      const timeB = typeof b.createdAt?.toMillis === 'function' ? b.createdAt.toMillis() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+      if (timeA !== timeB) {
+        return timeA - timeB;
+      }
+
+      // 4. Title fallback
+      return (a.title || '').localeCompare(b.title || '');
+    });
+  }, [tasks, goals]);
+
+  const activeTasks = sortedTasks.filter(t => !t.deleted);
+  const deletedTasks = [...tasks]
+    .filter(t => t.deleted === true)
+    .sort((a, b) => {
+      const timeA = typeof a.deletedAt?.toMillis === 'function' ? a.deletedAt.toMillis() : (a.deletedAt?.seconds ? a.deletedAt.seconds * 1000 : 0);
+      const timeB = typeof b.deletedAt?.toMillis === 'function' ? b.deletedAt.toMillis() : (b.deletedAt?.seconds ? b.deletedAt.seconds * 1000 : 0);
+      return timeB - timeA;
+    });
+
+  const selectedSubgoalIds = useMemo(() => {
+    if (!selectedGoalId || selectedGoalId === 'all' || selectedGoalId === 'deleted') return [];
+    return goals.filter(g => g.parentGoalId === selectedGoalId).map(s => s.id);
+  }, [selectedGoalId, goals]);
+
+  // ── Goal Progress Calculation ────────────────────────────────────────────────
+  const getGoalStats = (goalId) => {
+    const subgoals = subgoalsOf(goalId);
+    const treeGoalIds = [goalId, ...subgoals.map(s => s.id)];
+    const goalTasks = activeTasks.filter(t => treeGoalIds.includes(t.goalId));
+    const total = goalTasks.length;
+    const completed = goalTasks.filter(t => t.completed).length;
+    const inProgress = goalTasks.filter(t => !t.completed && !!t.inProgress).length;
+    const open = goalTasks.filter(t => !t.completed && !t.inProgress).length;
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return {
+      total,
+      completed,
+      inProgress,
+      open,
+      percent,
+      subgoalsCount: subgoals.length,
+    };
+  };
 
   const goalActiveTasks = selectedGoalId === 'all'
     ? activeTasks
-    : (selectedGoalId === 'deleted' ? activeTasks : activeTasks.filter(t => t.goalId === selectedGoalId));
+    : (selectedGoalId === 'deleted'
+        ? activeTasks
+        : activeTasks.filter(t => t.goalId === selectedGoalId || selectedSubgoalIds.includes(t.goalId)));
 
   const goalDeletedTasks = selectedGoalId === 'deleted'
     ? deletedTasks
     : (selectedGoalId === 'all'
         ? deletedTasks
-        : deletedTasks.filter(t => t.goalId === selectedGoalId));
+        : deletedTasks.filter(t => t.goalId === selectedGoalId || selectedSubgoalIds.includes(t.goalId)));
 
   const displayedActiveTasks = goalActiveTasks.filter(t => {
-    if (taskStatusFilter === 'open') return !t.completed;
+    if (taskStatusFilter === 'open') return !t.completed && !t.inProgress;
+    if (taskStatusFilter === 'in-progress') return !!t.inProgress && !t.completed;
     if (taskStatusFilter === 'completed') return t.completed;
     return true;
   });
@@ -284,14 +427,16 @@ export default function Dashboard() {
   const displayedDeletedTasks = goalDeletedTasks;
 
   const totalActiveCount = activeTasks.length;
-  const openTasksCount = activeTasks.filter(t => !t.completed).length;
+  const openTasksCount = activeTasks.filter(t => !t.completed && !t.inProgress).length;
+  const inProgressCount = activeTasks.filter(t => !!t.inProgress && !t.completed).length;
   const completedTasksCount = activeTasks.filter(t => t.completed).length;
   const deletedTasksCount = deletedTasks.length;
 
   const isGoalFiltered = selectedGoalId !== 'all' && selectedGoalId !== 'deleted';
 
   const filteredTotalCount = isGoalFiltered ? goalActiveTasks.length : totalActiveCount;
-  const filteredOpenCount = isGoalFiltered ? goalActiveTasks.filter(t => !t.completed).length : openTasksCount;
+  const filteredOpenCount = isGoalFiltered ? goalActiveTasks.filter(t => !t.completed && !t.inProgress).length : openTasksCount;
+  const filteredInProgressCount = isGoalFiltered ? goalActiveTasks.filter(t => !!t.inProgress && !t.completed).length : inProgressCount;
   const filteredCompletedCount = isGoalFiltered ? goalActiveTasks.filter(t => t.completed).length : completedTasksCount;
   const filteredDeletedCount = isGoalFiltered ? goalDeletedTasks.length : deletedTasksCount;
 
@@ -302,6 +447,11 @@ export default function Dashboard() {
 
   const handleSelectOpenFilter = () => {
     setTaskStatusFilter('open');
+    if (selectedGoalId === 'deleted') setSelectedGoalId('all');
+  };
+
+  const handleSelectInProgressFilter = () => {
+    setTaskStatusFilter('in-progress');
     if (selectedGoalId === 'deleted') setSelectedGoalId('all');
   };
 
@@ -337,13 +487,34 @@ export default function Dashboard() {
     );
   };
 
+  const renderTaskDueDate = (task) => {
+    if (!task.dueDate) return null;
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const parsedDate = parseLocalDate(task.dueDate);
+    const formattedDate = format(parsedDate, 'MMM d, yyyy');
+
+    if (task.completed || task.deleted) {
+      return <span>Due: {formattedDate}</span>;
+    }
+
+    if (task.dueDate < todayStr) {
+      return <span className="due-overdue" title="Overdue task">Overdue: {formattedDate}</span>;
+    }
+
+    if (task.dueDate === todayStr) {
+      return <span className="due-today" title="Due today">Due Today: {formattedDate}</span>;
+    }
+
+    return <span>Due: {formattedDate}</span>;
+  };
+
   // Single goal row in sidebar (shared by top-level + subgoal)
   const GoalRow = ({ goal, isSubgoal = false }) => {
     const isActive = selectedGoalId === goal.id;
     const isEditing = editingGoalId === goal.id;
     const children = subgoalsOf(goal.id);
-    const hasChildren = children.length > 0;
     const isExpanded = expandedGoals.includes(goal.id);
+    const stats = getGoalStats(goal.id);
 
     return (
       <div className={isSubgoal ? 'subgoal-group' : 'goal-group'}>
@@ -355,7 +526,7 @@ export default function Dashboard() {
               setIsSidebarOpen(false);
             }
           }}
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}
         >
           {/* Expand/collapse chevron — only on top-level goals */}
           {!isSubgoal && (
@@ -363,6 +534,7 @@ export default function Dashboard() {
               className="goal-expand-btn"
               onClick={(e) => toggleGoalExpansion(goal.id, e)}
               title={isExpanded ? 'Collapse subgoals' : 'Expand subgoals'}
+              style={{ marginTop: '0.15rem' }}
             >
               {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
             </button>
@@ -396,12 +568,30 @@ export default function Dashboard() {
                 <div className="goal-date">
                   {goal.dueDate ? `Due: ${format(new Date(goal.dueDate), 'MMM d, yyyy')}` : 'No date set'}
                 </div>
+                {stats.total > 0 ? (
+                  <div className="goal-mini-progress-wrapper">
+                    <div className="goal-mini-progress-track">
+                      <div
+                        className={`goal-mini-progress-fill ${stats.percent === 100 ? 'complete' : ''}`}
+                        style={{ width: `${stats.percent}%` }}
+                      />
+                    </div>
+                    <div className="goal-mini-progress-info">
+                      <span>{stats.completed}/{stats.total} done</span>
+                      <span className={`goal-mini-progress-percent ${stats.percent === 100 ? 'complete' : ''}`}>
+                        {stats.percent}%
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="goal-progress-empty">0 tasks</div>
+                )}
               </>
             )}
           </div>
 
           {!isEditing && (
-            <div className="goal-actions">
+            <div className="goal-actions" style={{ marginTop: '0.15rem' }}>
               <button
                 className="btn-icon"
                 title="Edit goal"
@@ -602,6 +792,23 @@ export default function Dashboard() {
         </div>
 
         <div
+          className={`stat-card stat-card-inprogress ${taskStatusFilter === 'in-progress' && selectedGoalId !== 'deleted' ? 'active' : ''}`}
+          onClick={handleSelectInProgressFilter}
+          title="Filter by In-Progress Tasks"
+        >
+          <div className="stat-icon-wrapper stat-icon-inprogress">
+            <Play size={18} />
+          </div>
+          <div className="stat-info">
+            <span className="stat-label">In-Progress</span>
+            <span className="stat-value">{filteredInProgressCount}</span>
+            {isGoalFiltered && (
+              <span className="stat-subtext">Overall: {inProgressCount}</span>
+            )}
+          </div>
+        </div>
+
+        <div
           className={`stat-card stat-card-completed ${taskStatusFilter === 'completed' && selectedGoalId !== 'deleted' ? 'active' : ''}`}
           onClick={handleSelectCompletedFilter}
           title="Filter by Completed Tasks"
@@ -769,7 +976,7 @@ export default function Dashboard() {
                           <span className={`priority-badge priority-${task.priority?.toLowerCase() || 'low'}`}>
                             {task.priority || 'Low'} Priority
                           </span>
-                          {task.dueDate && <span>Due: {format(new Date(task.dueDate), 'MMM d, yyyy')}</span>}
+                          {renderTaskDueDate(task)}
                         </div>
                       </div>
 
@@ -808,6 +1015,73 @@ export default function Dashboard() {
                   </span>
                 )}
               </div>
+
+              {/* Goal Progress Banner Card for Selected Goal */}
+              {selectedGoalId !== 'all' && selectedGoal && (() => {
+                const selectedStats = getGoalStats(selectedGoal.id);
+                return (
+                  <div className={`goal-progress-card ${selectedStats.percent === 100 && selectedStats.total > 0 ? 'complete' : ''}`}>
+                    <div className="goal-progress-card-top">
+                      <div className="goal-progress-card-info">
+                        <div className="goal-progress-status-badge">
+                          {selectedStats.total === 0 ? (
+                            <span className="badge-not-started"><Clock size={12} /> No tasks yet</span>
+                          ) : selectedStats.percent === 100 ? (
+                            <span className="badge-complete"><CheckCircle size={12} /> Milestone Achieved</span>
+                          ) : selectedStats.inProgress > 0 ? (
+                            <span className="badge-progress"><Play size={12} /> In Progress ({selectedStats.inProgress} active)</span>
+                          ) : (
+                            <span className="badge-progress"><Target size={12} /> Goal In Progress</span>
+                          )}
+                        </div>
+                        <div className="goal-progress-card-subtitle">
+                          {selectedStats.total === 0 ? (
+                            <span>Add tasks below to start tracking real-time progress for this milestone.</span>
+                          ) : (
+                            <span>
+                              <strong>{selectedStats.completed}</strong> of <strong>{selectedStats.total}</strong> tasks completed
+                              {selectedStats.open > 0 && ` (${selectedStats.open} remaining)`}
+                              {selectedStats.subgoalsCount > 0 && ` • across ${selectedStats.subgoalsCount} subgoals`}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className={`goal-progress-metric-pill ${selectedStats.percent === 100 && selectedStats.total > 0 ? 'complete' : ''}`}>
+                        <span className={`goal-progress-number ${selectedStats.percent === 100 && selectedStats.total > 0 ? 'complete' : ''}`}>
+                          {selectedStats.percent}%
+                        </span>
+                        <span className="goal-progress-label">done</span>
+                      </div>
+                    </div>
+                    <div className="goal-progress-track">
+                      <div
+                        className={`goal-progress-bar ${selectedStats.percent === 100 && selectedStats.total > 0 ? 'complete' : ''}`}
+                        style={{ width: `${selectedStats.percent}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Overall Progress for All Tasks View */}
+              {selectedGoalId === 'all' && totalActiveCount > 0 && (
+                <div className="overall-progress-card">
+                  <div className="overall-progress-info">
+                    <span>
+                      Overall Completion: <strong>{Math.round((completedTasksCount / totalActiveCount) * 100)}%</strong>
+                    </span>
+                    <span>
+                      <strong>{completedTasksCount}</strong> of <strong>{totalActiveCount}</strong> tasks finished
+                    </span>
+                  </div>
+                  <div className="overall-progress-track">
+                    <div
+                      className="overall-progress-fill"
+                      style={{ width: `${Math.round((completedTasksCount / totalActiveCount) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {selectedGoalId !== 'all' && (
                 <form onSubmit={handleAddTask} style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginBottom: '0.875rem' }}>
@@ -861,13 +1135,15 @@ export default function Dashboard() {
                   <div className="empty-state">
                     {taskStatusFilter === 'open'
                       ? 'No open tasks matching this view.'
+                      : taskStatusFilter === 'in-progress'
+                      ? 'No in-progress tasks matching this view.'
                       : taskStatusFilter === 'completed'
                       ? 'No completed tasks matching this view.'
                       : 'No tasks for this view yet.'}
                   </div>
                 ) : (
                   displayedActiveTasks.map(task => (
-                    <div key={task.id} className={`task-item ${task.completed ? 'completed' : ''}`}>
+                    <div key={task.id} className={`task-item ${task.completed ? 'completed' : ''} ${task.inProgress && !task.completed ? 'in-progress' : ''}`}>
                       <div className="checkbox-container" onClick={() => toggleTaskCompletion(task)}>
                         {task.completed ? (
                           <CheckCircle size={18} color="var(--success-color)" />
@@ -940,10 +1216,13 @@ export default function Dashboard() {
 
                             <div className="task-meta">
                               <TaskGoalBadge task={task} />
+                              {task.inProgress && !task.completed && (
+                                <span className="inprogress-badge"><Play size={10} /> In-Progress</span>
+                              )}
                               <span className={`priority-badge priority-${task.priority?.toLowerCase() || 'low'}`}>
                                 {task.priority || 'Low'} Priority
                               </span>
-                              {task.dueDate && <span>Due: {format(new Date(task.dueDate), 'MMM d, yyyy')}</span>}
+                              {renderTaskDueDate(task)}
                             </div>
                           </>
                         )}
@@ -951,6 +1230,13 @@ export default function Dashboard() {
 
                       {editingTaskId !== task.id && (
                         <div className="task-actions">
+                          <button
+                            className={`btn-icon ${task.inProgress && !task.completed ? 'btn-icon-inprogress' : ''}`}
+                            title={task.inProgress ? 'Mark as Open' : 'Mark In-Progress'}
+                            onClick={() => toggleTaskInProgress(task)}
+                          >
+                            <Play size={14} />
+                          </button>
                           <button
                             className="btn-icon"
                             title="Edit task"
